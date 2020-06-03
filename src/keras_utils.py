@@ -8,9 +8,14 @@ from os.path import splitext
 from src.label import Label
 from src.utils import getWH, nms
 from src.projection_utils import getRectPts, find_T_matrix
+import plogger
+
+# logClass = plogger.LogClass('keras_utils.py')
+# logger = logClass.get_logger()
+logger = plogger.Logger('test', console=True, file=True).logger
 
 
-class DLabel (Label):
+class DLabel (Label): 
 
 	def __init__(self,cl,pts,prob):
 		self.pts = pts
@@ -24,7 +29,7 @@ def save_model(model,path,verbose=0):
 	with open('%s.json' % path,'w') as json_file:
 		json_file.write(model_json)
 	model.save_weights('%s.h5' % path)
-	if verbose: print 'Saved to %s' % path
+	if verbose: print('Saved to %s' % path)
 
 def load_model(path,custom_objects={},verbose=0):
 	from keras.models import model_from_json
@@ -34,7 +39,7 @@ def load_model(path,custom_objects={},verbose=0):
 		model_json = json_file.read()
 	model = model_from_json(model_json, custom_objects=custom_objects)
 	model.load_weights('%s.h5' % path)
-	if verbose: print 'Loaded from %s' % path
+	if verbose: print('Loaded from %s' % path)
 	return model
 
 
@@ -49,7 +54,7 @@ def reconstruct(Iorig,I,Y,out_size,threshold=.9):
 	ywh = Y.shape[1::-1]
 	iwh = np.array(I.shape[1::-1],dtype=float).reshape((2,1))
 
-	xx,yy = np.where(Probs>threshold)
+	xx,yy = np.where(Probs>threshold)  # Grid 영역중에서 Object probability가 Threshold를 넘는 부분
 
 	WH = getWH(I.shape)
 	MN = WH/net_stride
@@ -66,7 +71,7 @@ def reconstruct(Iorig,I,Y,out_size,threshold=.9):
 
 		mn = np.array([float(x) + .5,float(y) + .5])
 
-		A = np.reshape(affine,(2,3))
+		A = np.reshape(affine,(2,3)) #affine Transformation matrix
 		A[0,0] = max(A[0,0],0.)
 		A[1,1] = max(A[1,1],0.)
 
@@ -80,7 +85,7 @@ def reconstruct(Iorig,I,Y,out_size,threshold=.9):
 
 	final_labels = nms(labels,.1)
 	TLps = []
-
+	logger.debug(f'final_labels : {final_labels}')
 	if len(final_labels):
 		final_labels.sort(key=lambda x: x.prob(), reverse=True)
 		for i,label in enumerate(final_labels):
@@ -95,7 +100,7 @@ def reconstruct(Iorig,I,Y,out_size,threshold=.9):
 	return final_labels,TLps
 	
 
-def detect_lp(model,I,max_dim,net_step,out_size,threshold):
+def detect_lp(model, I, max_dim, net_step, out_size, threshold):
 
 	min_dim_img = min(I.shape[:2])
 	factor 		= float(max_dim)/min_dim_img
@@ -107,10 +112,17 @@ def detect_lp(model,I,max_dim,net_step,out_size,threshold):
 
 	T = Iresized.copy()
 	T = T.reshape((1,T.shape[0],T.shape[1],T.shape[2]))
-
+	logger.debug(f'T shape : {T.shape}')
+	logger.debug(f'I shape : {I.shape}')
+	# cv2.imshow('img', I)
+	# cv2.imshow('T', T[0])
+	# cv2.waitKey(0)
 	start 	= time.time()
 	Yr 		= model.predict(T)
 	Yr 		= np.squeeze(Yr)
+	# logger.debug(f'model.predict Yr : {Yr}')
+	# logger.debug(f'Yr shape : {Yr.shape}')
+
 	elapsed = time.time() - start
 
 	L,TLps = reconstruct(I,Iresized,Yr,out_size,threshold)
